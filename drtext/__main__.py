@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+
 import time
 import re
 from datetime import datetime, timedelta
@@ -10,7 +11,11 @@ project = projectManager.GetCurrentProject()
 
 srt_file_path = "PATH_TO_SRT_FILE"
 target_video_track = 2
-
+# I manually set the frame rate here because the API that is commented out
+# above returns the wrong value (it rounds down)
+frame_rate=29.97
+base_rate=29.97
+duration_factor = frame_rate / base_rate
 template_index = 0
 mediaPoolItemsList = []
 
@@ -76,7 +81,9 @@ def GenerateTextPlusSubtitles(srt_path, video_track_index):
         return
 
     timelineStartFrame = timeline.GetStartFrame()
-    frame_rate = int(timeline.GetSetting("timelineFrameRate"))  # get timeline framerate
+    #frame_rate = int(timeline.GetSetting("timelineFrameRate"))  # Incorrect framerate
+
+    print(f'Operating at the following FPS: {frame_rate}')
 
     entries = re.split(r"\n{2,}", content.strip())
     time_pattern = re.compile(r"(\d+):(\d+):(\d+),(\d+) --> (\d+):(\d+):(\d+),(\d+)")
@@ -90,12 +97,17 @@ def GenerateTextPlusSubtitles(srt_path, video_track_index):
             m = time_pattern.match(times)
             t_start = list(map(int, m.groups()[0:4]))
             t_end = list(map(int, m.groups()[4:8]))
+            print (f"Time for subtitle: {t_start} and {t_end}")
 
-            posInFrames = int(round((t_start[0] * 3600 + t_start[1] * 60 + t_start[2] + t_start[3] / 1000) * frame_rate))
+            posInFrames = int((t_start[0] * 3600 + t_start[1] * 60 + t_start[2] + t_start[3] / 1000) * frame_rate)
             timelinePos = timelineStartFrame + posInFrames
 
-            endPosInFrames = int(round((t_end[0] * 3600 + t_end[1] * 60 + t_end[2] + t_end[3] / 1000) * frame_rate))
+            print(f"Start position for subtitle: POS_IN_FRAMES - {posInFrames}, TIMELINE_POS - {timelinePos}")
+
+            endPosInFrames = int((t_end[0] * 3600 + t_end[1] * 60 + t_end[2] + t_end[3] / 1000) * frame_rate)
             duration = (timelineStartFrame + endPosInFrames) - timelinePos
+
+            print(f"End position for subtitle: END_POS_IN_FRAMES - {endPosInFrames}, DURATION - {duration}")
 
             text = "\n".join(text_lines).upper()
             subs.append((timelinePos, duration, text))
@@ -117,19 +129,26 @@ def GenerateTextPlusSubtitles(srt_path, video_track_index):
     for i, (timelinePos, duration, text) in enumerate(subs):
         if i < len(subs) - 1 and subs[i + 1][0] - (timelinePos + duration) < 200:  # if gap between subs is less than 10 frames
             duration = (subs[i + 1][0] - subs[i][0]) - 1  # then set current subtitle to end at start of next subtitle - 1 frame
+
+        print(f"Subtitle: {i} for {timelinePos}, {duration}")
+
         newClip = {
             "mediaPoolItem": templateText,
             "startFrame": 0,
-            "endFrame": duration,
+            "endFrame": duration / duration_factor,
             "trackIndex": timelineTrack,
             "recordFrame": timelinePos
         }
-        mediaPool.AppendToTimeline([newClip])
+
+        if (mediaPool.AppendToTimeline([newClip])):
+            print(f"Appended to timeline for {timelinePos} with duration of {duration}")
 
     print("Modifying subtitle text content...")
 
     # Get list of Text+ in timeline
     clipList = timeline.GetItemListInTrack('video', timelineTrack)
+
+    print(f"There are {len(clipList)} clips in the timeline.")
 
     for i, clip in enumerate(clipList):
         if clip.GetStart() >= subs[0][0]:

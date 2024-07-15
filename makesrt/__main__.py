@@ -23,12 +23,12 @@ def TranscribeAudio(path, output):
     
     word_options = {
         "highlight_words": False,
-        "max_line_count": 3,
-        "max_line_width": 15
+        "max_line_count": 2,
+        "max_line_width": 25
     }
 
     srt_writer = get_writer("srt", os.path.dirname(output))
-    srt_writer(result, os.path.basename(path), word_options)
+    srt_writer(result, os.path.basename(output), word_options)
 
     return output
 
@@ -149,7 +149,7 @@ if len(sys.argv) > 2:
         data = ProcessSRTFile(result)
         event_name = result[:-4]
 
-        GenerateFCPXML(data, os.path.join(os.path.dirname(result), "timeline.fpcxml"))
+        GenerateFCPXML(data, os.path.join(os.path.dirname(result), "timeline.fcpxml"))
 else:
     print("No arguments were passed.")
 
