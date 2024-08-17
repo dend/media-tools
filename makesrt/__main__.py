@@ -24,7 +24,7 @@ def TranscribeAudio(path, output):
     word_options = {
         "highlight_words": False,
         "max_line_count": 2,
-        "max_line_width": 25
+        "max_line_width": 15
     }
 
     srt_writer = get_writer("srt", os.path.dirname(output))
