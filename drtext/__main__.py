@@ -9,7 +9,7 @@ import platform
 projectManager = resolve.GetProjectManager()
 project = projectManager.GetCurrentProject()
 
-srt_file_path = "PATH_TO_SRT_FILE"
+srt_file_path = "soundclip.srt"
 target_video_track = 2
 # I manually set the frame rate here because the API that is commented out
 # above returns the wrong value (it rounds down)
@@ -35,13 +35,15 @@ def MediaPoolRecursiveSearch(folder, mediaPoolItemsList, pattern):
     # Iterate through item properties to see if they match
     # the search pattern that we've established.
     for item, properties in zip(items, item_properties):
+        print(properties["Type"])
         itemType = properties["Type"]
-        if itemType == "Generator":
+        if itemType == "Fusion Title":
             itemName = item.GetName()
             clipName = properties["Clip Name"]
 
             # Check if itemName or clipName contains the search pattern.
             if pattern.search(itemName) or pattern.search(clipName):
+                print(f"Found media item: {item}")
                 mediaPoolItemsList.append(item)
 
     # Recursively search subfolders in the media pool.
