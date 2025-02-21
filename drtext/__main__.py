@@ -11,12 +11,6 @@ project = projectManager.GetCurrentProject()
 
 srt_file_path = "soundclip.srt"
 target_video_track = 2
-# I manually set the frame rate here because the API that is commented out
-# above returns the wrong value (it rounds down)
-frame_rate=29.97
-base_rate=29.97
-duration_factor = frame_rate / base_rate
-template_index = 0
 mediaPoolItemsList = []
 
 text_plus_template_search_pattern = re.compile(r'text|title|subtitle', re.IGNORECASE)
@@ -28,12 +22,9 @@ def IdentityTemplateInMediaPool():
     MediaPoolRecursiveSearch(folder, mediaPoolItemsList, text_plus_template_search_pattern)
 
 def MediaPoolRecursiveSearch(folder, mediaPoolItemsList, pattern):
-    # Retrieve all clip properties at once.
     items = folder.GetClipList()
     item_properties = [item.GetClipProperty() for item in items]
 
-    # Iterate through item properties to see if they match
-    # the search pattern that we've established.
     for item, properties in zip(items, item_properties):
         print(properties["Type"])
         itemType = properties["Type"]
@@ -41,15 +32,13 @@ def MediaPoolRecursiveSearch(folder, mediaPoolItemsList, pattern):
             itemName = item.GetName()
             clipName = properties["Clip Name"]
 
-            # Check if itemName or clipName contains the search pattern.
             if pattern.search(itemName) or pattern.search(clipName):
                 print(f"Found media item: {item}")
                 mediaPoolItemsList.append(item)
 
-    # Recursively search subfolders in the media pool.
     subfolders = folder.GetSubFolderList()
     for subfolder in subfolders:
-        recursiveSearch(subfolder, mediaPoolItemsList)
+        MediaPoolRecursiveSearch(subfolder, mediaPoolItemsList, pattern)
 
 def GenerateTextPlusSubtitles(srt_path, video_track_index):
     content = ''
@@ -64,7 +53,6 @@ def GenerateTextPlusSubtitles(srt_path, video_track_index):
         print("No project is loaded")
         return
 
-    # Get current timeline. If no current timeline try to load it from timeline list
     timeline = project.GetCurrentTimeline()
     if not timeline:
         if project.GetTimelineCount() > 0:
@@ -74,7 +62,6 @@ def GenerateTextPlusSubtitles(srt_path, video_track_index):
             print("Current project has no timelines")
             return
 
-    # Read the subtitles (SRT) file.
     try:
         with open(srt_path, "r", encoding="utf-8") as f:
             content = f.read()
@@ -83,7 +70,7 @@ def GenerateTextPlusSubtitles(srt_path, video_track_index):
         return
 
     timelineStartFrame = timeline.GetStartFrame()
-    #frame_rate = int(timeline.GetSetting("timelineFrameRate"))  # Incorrect framerate
+    frame_rate = float(timeline.GetSetting("timelineFrameRate"))
 
     print(f'Operating at the following FPS: {frame_rate}')
 
@@ -116,7 +103,6 @@ def GenerateTextPlusSubtitles(srt_path, video_track_index):
 
     print("Found", len(subs), "subtitles in SRT file")
 
-    # We take the first template that was registered in the media pool list.
     templateText = mediaPoolItemsList[0]
 
     if not templateText:
@@ -127,17 +113,18 @@ def GenerateTextPlusSubtitles(srt_path, video_track_index):
 
     timelineTrack = video_track_index
 
-    # Add template text to timeline (text not set yet)
     for i, (timelinePos, duration, text) in enumerate(subs):
-        if i < len(subs) - 1 and subs[i + 1][0] - (timelinePos + duration) < 200:  # if gap between subs is less than 10 frames
-            duration = (subs[i + 1][0] - subs[i][0]) - 1  # then set current subtitle to end at start of next subtitle - 1 frame
+        if i < len(subs) - 1:
+            duration = subs[i + 1][0] - timelinePos  # Extend current subtitle to start of next subtitle
+        else:
+            duration = duration  # Keep the last subtitle's duration as it is
 
         print(f"Subtitle: {i} for {timelinePos}, {duration}")
 
         newClip = {
             "mediaPoolItem": templateText,
             "startFrame": 0,
-            "endFrame": duration / duration_factor,
+            "endFrame": duration,
             "trackIndex": timelineTrack,
             "recordFrame": timelinePos
         }
@@ -147,7 +134,6 @@ def GenerateTextPlusSubtitles(srt_path, video_track_index):
 
     print("Modifying subtitle text content...")
 
-    # Get list of Text+ in timeline
     clipList = timeline.GetItemListInTrack('video', timelineTrack)
 
     print(f"There are {len(clipList)} clips in the timeline.")
@@ -168,7 +154,6 @@ def GenerateTextPlusSubtitles(srt_path, video_track_index):
                 break
 
     print(f"Subtitles added video track {video_track_index}.")
-
 
 IdentityTemplateInMediaPool()
 GenerateTextPlusSubtitles(srt_file_path, target_video_track)
