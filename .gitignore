@@ -163,3 +163,5 @@ cython_debug/
 *.dll
 *.txt
 *.srt
+*.mp3
+*.wav
