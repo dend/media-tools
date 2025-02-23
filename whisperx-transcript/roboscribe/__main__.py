@@ -27,7 +27,7 @@ def clean_transcript_segment(model, tokenizer, system_message, segment):
 
     outputs = model.generate(
         input_ids,
-        max_new_tokens=1000,
+        max_new_tokens=2048,
         eos_token_id=terminators,
         do_sample=False,
         temperature=0.5,
