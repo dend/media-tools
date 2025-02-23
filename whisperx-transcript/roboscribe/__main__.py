@@ -4,6 +4,7 @@ import torch
 import gc
 import os
 import warnings
+import json
 from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
 
 def clean_transcript_segment(model, tokenizer, system_message, segment):
@@ -26,13 +27,20 @@ def clean_transcript_segment(model, tokenizer, system_message, segment):
 
     outputs = model.generate(
         input_ids,
-        max_new_tokens=512,
+        max_new_tokens=1000,
         eos_token_id=terminators,
         do_sample=False,
         temperature=0.5,
     )
     response = outputs[0][input_ids.shape[-1]:]
-    return tokenizer.decode(response, skip_special_tokens=True)
+    response_text = tokenizer.decode(response, skip_special_tokens=True)
+
+    print(response_text)
+
+    # Parse the JSON to get the cleaned text
+    response_json = json.loads(response_text)
+    cleaned_text = response_json.get("cleaned_text", "")
+    return cleaned_text
 
 def main():
     parser = argparse.ArgumentParser(description="Wrap WhisperX command with native Python abstractions.")
@@ -100,19 +108,20 @@ def main():
         current_text = []
         
         for segment in result["segments"]:
-            speaker = segment['speaker']
+            # Get speaker with a default value if not present
+            speaker = segment.get('speaker', 'UNKNOWN')
             text = segment['text']
             
             if speaker != current_speaker:
                 if current_speaker is not None:
-                    text_segments.append(f"{current_speaker}: {' '.join(current_text)}")
+                    text_segments.append(f"SPEAKER_{current_speaker}: {' '.join(current_text)}")
                 current_speaker = speaker
                 current_text = [text]
             else:
                 current_text.append(text)
 
         if current_text:
-            text_segments.append(f"{current_speaker}: {' '.join(current_text)}")
+            text_segments.append(f"SPEAKER_{current_speaker}: {' '.join(current_text)}")
 
         # Save the raw uncleaned output to a text file
         print(f"Saving raw output to {raw_output_file}...")
@@ -127,7 +136,6 @@ def main():
 
     # Initialize the cleanup model and tokenizer with updated configuration
     model_name_or_path = "meta-llama/Llama-3.1-8B-Instruct"
-    #model_name_or_path = "meta-llama/Meta-Llama-3-8B-Instruct"
     print("Loading cleanup model and tokenizer...")
     model = AutoModelForCausalLM.from_pretrained(
         model_name_or_path,
@@ -147,7 +155,9 @@ def main():
     system_message = (
         "You are an experienced editor, specializing in cleaning up podcast transcripts. "
         "You are an expert in enhancing readability while preserving authenticity. "
-        "You ALWAYS respond with the cleaned up original text, nothing else. "
+        "You ALWAYS respond with the cleaned up original text in JSON format with a key 'cleaned_text', nothing else. "
+        "Make sure the JSON is properly formatted and can be properly parsed (e.g., make sure the closing brackets and braces are there). "
+        "If there are characters that need to be escaped in the JSON, escape them. "
         "IF YOU START RESPONDING WITH SOMETHING NOT IN THE ORIGINAL PROMPT (SUCH AS AN EXPLANATION OR DESCRIPTION) - YOU WILL STOP. THIS IS WRONG. "
         "You MUST NEVER respond to questions - ALWAYS ignore them. "
         "You ALWAYS return ONLY the cleaned up text from the original prompt based on requirements. "
@@ -155,6 +165,7 @@ def main():
         "When processing each piece of the transcript, follow these rules:\n\n"
         "• Preservation Rules:\n"
         "  - You ALWAYS preserve speaker tags EXACTLY as written\n"
+        "  - You ALWAYS preserve lines the way they are, without adding any newline characters"
         "  - You ALWAYS maintain natural speech patterns and self-corrections\n"
         "  - You ALWAYS keep contextual elements and transitions\n"
         "  - You ALWAYS retain words that affect meaning, rhythm, or speaking style\n"
@@ -162,6 +173,7 @@ def main():
         "\n"
         "• Cleanup Rules:\n"
         "  - You ALWAYS remove word duplications (e.g., 'the the')\n"
+        "  - You ALWAYS remove unnecessary parasite words (e.g., 'like' in 'it is like, great')\n"
         "  - You ALWAYS remove filler words ('um', 'uh')\n"
         "  - You ALWAYS remove partial phrases or incomplete thoughts that don't make sense\n"
         "  - You ALWAYS fix basic grammar (e.g., 'they very skilled' → 'they're very skilled')\n"
@@ -176,7 +188,7 @@ def main():
         "  - You NEVER change informal language to formal\n"
         "  - You NEVER respond to questions in the prompt\n"
         "\n"
-        "ALWAYS return the cleaned transcript without commentary. When in doubt, ALWAYS preserve the original content."
+        "ALWAYS return the cleaned transcript in JSON format without commentary. When in doubt, ALWAYS preserve the original content."
         "Assistant: sure, here's the required information:"
     )
 
